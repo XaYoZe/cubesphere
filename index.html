@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方块戴森计划 · CubeSphere</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- 标题画面 -->
+<div id="titleScreen">
+  <div class="title-stars"></div>
+  <div class="title-inner">
+    <h1 class="game-logo">方块<span class="logo-accent">戴森</span>计划</h1>
+    <div class="game-sub">CUBESPHERE — 体素沙盒 × 星际工厂</div>
+    <div class="title-buttons">
+      <button class="btn btn-big" id="btnStart">开始游戏</button>
+      <button class="btn btn-ghost" id="btnNew">新的世界</button>
+    </div>
+    <div class="title-help">
+      <b>操作</b>：WASD 移动 · 空格 跳跃 · 左键 挖掘 · 右键 放置/交互<br>
+      E 背包 · T 科技树 · 数字键/滚轮 切换快捷栏 · Q 丢弃 · F 吃食物 · M 音乐开关<br>
+      <b>目标</b>：白手起家 → 石器 → 铁器 → 电气化 → 自动工厂 → 发射太阳帆，建成<b class="cyan">戴森球</b>！
+    </div>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud" style="display:none">
+  <div id="crosshair">+</div>
+  <div id="hearts"></div>
+  <div id="hotbarWrap">
+    <div id="heldName"></div>
+    <div id="hotbar"></div>
+  </div>
+  <div id="topRight">
+    <div id="clockHud">☀ 06:00</div>
+    <div id="powerHud" class="hud-card" style="display:none"></div>
+    <div id="dysonHud" class="hud-card" style="display:none"></div>
+  </div>
+  <div id="questPanel"></div>
+  <div id="toasts"></div>
+  <div id="hurtFlash"></div>
+  <div id="waterOverlay"></div>
+</div>
+
+<!-- 弹窗遮罩 -->
+<div id="overlay" style="display:none">
+
+  <!-- 背包 / 工作台 -->
+  <div class="panel mc-panel" id="invPanel" style="display:none">
+    <div class="panel-title" id="craftTitle">合成</div>
+    <div class="inv-top">
+      <div class="craft-area">
+        <div id="craftGrid" class="grid"></div>
+        <div class="craft-arrow">➜</div>
+        <div id="craftOut"></div>
+      </div>
+      <div class="recipe-book">
+        <div class="rb-title">📖 配方书</div>
+        <div id="recipeBook"></div>
+      </div>
+    </div>
+    <div class="inv-label">物品栏</div>
+    <div id="invGrid" class="grid grid9"></div>
+    <div id="invHotbar" class="grid grid9 hotbar-row"></div>
+  </div>
+
+  <!-- 熔炉 -->
+  <div class="panel mc-panel" id="furnacePanel" style="display:none">
+    <div class="panel-title">熔炉</div>
+    <div class="furnace-area">
+      <div class="furn-col">
+        <div id="furnIn"></div>
+        <div class="furn-fire"><div id="furnFlame"></div></div>
+        <div id="furnFuel"></div>
+      </div>
+      <div class="furn-progress"><div id="furnArrow"></div></div>
+      <div id="furnOut" class="furn-out"></div>
+    </div>
+    <div class="inv-label">物品栏</div>
+    <div id="furnInv" class="grid grid9"></div>
+    <div id="furnHotbar" class="grid grid9 hotbar-row"></div>
+  </div>
+
+  <!-- 箱子 -->
+  <div class="panel mc-panel" id="chestPanel" style="display:none">
+    <div class="panel-title">箱子</div>
+    <div id="chestGrid" class="grid grid9"></div>
+    <div class="inv-label">物品栏</div>
+    <div id="chestInv" class="grid grid9"></div>
+    <div id="chestHotbar" class="grid grid9 hotbar-row"></div>
+  </div>
+
+  <!-- 机器面板（科幻风） -->
+  <div class="panel sci-panel" id="machinePanel" style="display:none">
+    <div class="panel-title sci-title" id="machName">机器</div>
+    <div class="mach-body">
+      <div id="machStatus"></div>
+      <div id="machBuffer"></div>
+    </div>
+    <div class="inv-label">物品栏 <span class="tt-hint">(Shift+点击 送入机器)</span></div>
+    <div id="machInv" class="grid grid9"></div>
+    <div id="machHotbar" class="grid grid9 hotbar-row"></div>
+  </div>
+
+  <!-- 科技树 -->
+  <div class="panel sci-panel tech-wide" id="techPanel" style="display:none">
+    <div class="panel-title sci-title">⚛ 科技树 <span class="tt-hint" style="float:right">T / Esc 关闭</span></div>
+    <div class="tech-layout">
+      <div id="techNodes"></div>
+      <div id="techDetail"><p class="tt-desc">点击左侧科技节点查看详情</p></div>
+    </div>
+  </div>
+
+  <!-- 暂停 -->
+  <div class="panel mc-panel pause-panel" id="pausePanel" style="display:none">
+    <div class="panel-title">游戏暂停</div>
+    <button class="btn" id="btnResume">回到游戏</button>
+    <button class="btn" id="btnSave">保存世界</button>
+    <button class="btn" id="btnHelp">操作说明</button>
+    <div id="helpBox" style="display:none">
+      WASD 移动 · 空格 跳跃 · Shift/Ctrl 冲刺<br>
+      左键(按住) 挖掘 · 右键 放置 / 打开方块与机器<br>
+      E 背包 · T 科技树 · Q 丢弃手持 · F 进食 · M 音乐<br>
+      机器朝向 = 放置时你面对的方向（传送带/机器出料口）<br>
+      传送带指向机器 = 送料；机器面前的传送带 = 出料<br>
+      每 20 秒自动保存
+    </div>
+  </div>
+</div>
+
+<!-- 死亡 -->
+<div id="deathPanel" style="display:none">
+  <div class="death-inner">
+    <h2>你死了！</h2>
+    <button class="btn btn-big" id="btnRespawn">重生</button>
+  </div>
+</div>
+
+<!-- 胜利 -->
+<div id="victoryPanel" style="display:none">
+  <div class="victory-inner">
+    <div class="victory-glow"></div>
+    <h1>🌟 戴森球完成 🌟</h1>
+    <p>100 张太阳帆已环绕恒星运行。<br>从徒手砍下第一棵树，到点亮一颗恒星——<br>这就是你的文明史诗。</p>
+    <button class="btn btn-big" id="btnVictoryContinue">继续游玩</button>
+  </div>
+</div>
+
+<div id="tooltip" style="display:none"></div>
+<div id="cursorItem" style="display:none"></div>
+
+<script src="lib/three.min.js"></script>
+<script src="js/noise.js"></script>
+<script src="js/blocks.js"></script>
+<script src="js/items.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/world.js"></script>
+<script src="js/player.js"></script>
+<script src="js/machines.js"></script>
+<script src="js/sky.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
