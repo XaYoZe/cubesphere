@@ -391,7 +391,12 @@ class Game {
         if (tier < info.tier) { canHarvest = false; speed = 0.3; }
       }
       const need = Math.max(0.15, info.hardness / speed);
-      this.breaking = { x: hit.x, y: hit.y, z: hit.z, t: 0, need, canHarvest, id: hit.id };
+      // 按方块坐标哈希选择裂纹变体 + 镜像，增加多样性
+      const h = ((hit.x * 73856093) ^ (hit.y * 19349663) ^ (hit.z * 83492791)) >>> 0;
+      this.breaking = {
+        x: hit.x, y: hit.y, z: hit.z, t: 0, need, canHarvest, id: hit.id,
+        crackVar: h % TEX.crackVariants, crackFlip: ((h >> 4) & 1) === 1,
+      };
       this.digSndT = 0;
     }
     const bk = this.breaking;
@@ -401,7 +406,7 @@ class Game {
     // 裂纹显示
     this.crackMesh.visible = true;
     this.crackMesh.position.set(bk.x + 0.5, bk.y + 0.5, bk.z + 0.5);
-    this.setCrackStage(Math.min(4, Math.floor(bk.t / bk.need * 5)));
+    this.setCrackStage(Math.min(4, Math.floor(bk.t / bk.need * 5)), bk.crackVar, bk.crackFlip);
     if (bk.t >= bk.need) {
       this.breakBlock(bk.x, bk.y, bk.z, bk.canHarvest);
       this.breaking = null;
@@ -409,15 +414,16 @@ class Game {
     }
   }
 
-  setCrackStage(s) {
-    const uv = TEX.uv(TEX.crackBase + s);
+  setCrackStage(s, v = 0, flip = false) {
+    const uv = TEX.uv(TEX.crackBase + v * 5 + s);
+    const u0 = flip ? uv.u1 : uv.u0, u1 = flip ? uv.u0 : uv.u1;
     const geo = this.crackMesh.geometry;
     const uvAttr = geo.attributes.uv;
     for (let f = 0; f < 6; f++) {
-      uvAttr.setXY(f * 4 + 0, uv.u0, uv.v1);
-      uvAttr.setXY(f * 4 + 1, uv.u1, uv.v1);
-      uvAttr.setXY(f * 4 + 2, uv.u0, uv.v0);
-      uvAttr.setXY(f * 4 + 3, uv.u1, uv.v0);
+      uvAttr.setXY(f * 4 + 0, u0, uv.v1);
+      uvAttr.setXY(f * 4 + 1, u1, uv.v1);
+      uvAttr.setXY(f * 4 + 2, u0, uv.v0);
+      uvAttr.setXY(f * 4 + 3, u1, uv.v0);
     }
     uvAttr.needsUpdate = true;
   }

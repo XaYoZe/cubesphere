@@ -6,6 +6,7 @@ const ATLAS_TILE = 16, ATLAS_COLS = 8, ATLAS_ROWS = 8;
 const TEX = {
   canvas: null, ctx: null,
   crackBase: 32,
+  crackVariants: 4,
   init() {
     const c = document.createElement('canvas');
     c.width = ATLAS_COLS * ATLAS_TILE; c.height = ATLAS_ROWS * ATLAS_TILE;
@@ -214,21 +215,67 @@ const TEX = {
         }
       }
     }
-    // 32-36 裂纹阶段
-    for (let s = 0; s < 5; s++) {
-      const idx = this.crackBase + s;
-      const [tx, ty] = this.tilePos(idx);
-      g.clearRect(tx, ty, 16, 16);
-      const rand = mulberry32(400 + s);
-      g.fillStyle = 'rgba(20,16,12,0.85)';
-      const cracks = 2 + s * 2;
-      for (let c = 0; c < cracks; c++) {
-        let x = 4 + (rand() * 8) | 0, y = 4 + (rand() * 8) | 0;
-        const len = 3 + s * 2;
-        for (let k = 0; k < len; k++) {
-          g.fillRect(tx + x, ty + y, 1, 1);
-          x += (rand() * 3 | 0) - 1; y += (rand() * 3 | 0) - 1;
-          x = Math.max(0, Math.min(15, x)); y = Math.max(0, Math.min(15, y));
+    // 32-51 裂纹阶段：4 套变体 × 5 阶段，均从中心蔓延到边界
+    for (let v = 0; v < this.crackVariants; v++) {
+      const rand = mulberry32(401 + v * 131);
+      const RAYS = 6 + (rand() * 3 | 0);          // 每套 6~8 条主干
+      const driftAmp = 0.5 + rand() * 0.7;        // 每套弯曲程度不同
+      const rays = [];
+      for (let r = 0; r < RAYS; r++) {
+        const ang = (r / RAYS) * Math.PI * 2 + (rand() - 0.5) * 1.0;
+        const cos = Math.cos(ang), sin = Math.sin(ang);
+        const pcos = Math.cos(ang + Math.PI / 2), psin = Math.sin(ang + Math.PI / 2);
+        let fx = 8, fy = 8, drift = 0;
+        const path = [];
+        for (let step = 0; step < 22; step++) {
+          drift = drift * 0.7 + (rand() - 0.5) * 1.2;
+          fx += cos + pcos * drift * driftAmp;
+          fy += sin + psin * drift * driftAmp;
+          const px = Math.round(fx), py = Math.round(fy);
+          if (px < 0 || px > 15 || py < 0 || py > 15) break;
+          const last = path[path.length - 1];
+          if (!last || last[0] !== px || last[1] !== py) path.push([px, py]);
+        }
+        // 中段分叉：0~2 条（后期阶段才显现）
+        const branches = [];
+        const bCount = rand() < 0.35 ? 2 : rand() < 0.8 ? 1 : 0;
+        for (let b = 0; b < bCount && path.length >= 4; b++) {
+          const bi = 2 + (rand() * (path.length - 3) | 0);
+          const bang = ang + (rand() < 0.5 ? -1 : 1) * (0.5 + rand() * 0.7);
+          let bx = path[bi][0], by = path[bi][1];
+          const bpath = [];
+          for (let step = 0; step < 4 + (rand() * 4 | 0); step++) {
+            bx += Math.cos(bang) + (rand() - 0.5);
+            by += Math.sin(bang) + (rand() - 0.5);
+            const px = Math.round(bx), py = Math.round(by);
+            if (px < 0 || px > 15 || py < 0 || py > 15) break;
+            bpath.push([px, py]);
+          }
+          branches.push({ at: bi, path: bpath });
+        }
+        rays.push({ path, branches });
+      }
+      // 中心碎裂核像素（每套位置不同）
+      const core = [[7, 7], [8, 8], [8, 7], [7, 8]];
+      const coreExtra = [];
+      for (let k = 0; k < 4; k++) coreExtra.push([6 + (rand() * 4 | 0), 6 + (rand() * 4 | 0)]);
+      for (let s = 0; s < 5; s++) {
+        const idx = this.crackBase + v * 5 + s;
+        const [tx, ty] = this.tilePos(idx);
+        g.clearRect(tx, ty, 16, 16);
+        const frac = (s + 1) / 5;
+        g.fillStyle = `rgba(18,14,11,${(0.55 + s * 0.09).toFixed(2)})`;
+        for (let k = 0; k < Math.min(core.length, 1 + s); k++) g.fillRect(tx + core[k][0], ty + core[k][1], 1, 1);
+        for (let k = 0; k < s - 1 && k < coreExtra.length; k++) g.fillRect(tx + coreExtra[k][0], ty + coreExtra[k][1], 1, 1);
+        for (const { path, branches } of rays) {
+          const n = Math.ceil(path.length * frac);
+          for (let k = 0; k < n; k++) g.fillRect(tx + path[k][0], ty + path[k][1], 1, 1);
+          for (const br of branches) {
+            if (frac > 0.55 && n > br.at) {
+              const bn = Math.ceil(br.path.length * (frac - 0.55) / 0.45);
+              for (let k = 0; k < bn; k++) g.fillRect(tx + br.path[k][0], ty + br.path[k][1], 1, 1);
+            }
+          }
         }
       }
     }

@@ -9,7 +9,7 @@
 
 - **No modules.** All JS files are classic `<script>` tags sharing globals, loaded in a strict order defined in `index.html`: `noise → blocks → items → textures → audio → world → player → machines → sky → ui → main`. New files must be added to that list in dependency order; don't introduce `import`/`export`.
 - Globals by file: `B`/`BLOCKS` (blocks.js), `ITEMS`/`RECIPES`/`TECHS`/`QUESTS` (items.js), `TEX`/`ICONS` (textures.js), `Sfx` (audio.js), `UI` (ui.js), `window.game` (main.js). `machines.js`/`sky.js` reference `window.game` lazily inside update loops — safe only because `game` is assigned before the first frame.
-- All textures are canvas-painted into one atlas (`TEX`, 8×8 tiles of 16px). Block `tex` arrays in blocks.js are atlas tile indices; crack overlay stages start at index 32 (`TEX.crackBase`). Item icons are pixel-art string grids in `ICONS.art`.
+- All textures are canvas-painted into one atlas (`TEX`, 8×8 tiles of 16px). Block `tex` arrays in blocks.js are atlas tile indices; crack overlay occupies tiles 32-51 (`TEX.crackBase`, 4 variants × 5 stages, tile = base + variant*5 + stage). Item icons are pixel-art string grids in `ICONS.art`.
 - All audio is procedural WebAudio in `Sfx` — never add media files. `Sfx.init()` must run inside a user-gesture handler.
 - Machines are NOT chunk voxels: the block grid stores `B.MACHINE` while `MachineSystem` keeps the real entity + Three.js model. Removing a machine must go through `MachineSystem.remove`, not `world.setBlock` alone.
 - Facing convention everywhere: `0=+z(南) 1=+x(东) 2=-z(北) 3=-x(西)`; machine models are built front-facing `+z` and rotated `facing * PI/2`. Player yaw→facing uses the `map = [2,3,0,1]` table in `main.js tryPlace`.
