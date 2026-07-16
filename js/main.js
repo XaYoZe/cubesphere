@@ -19,6 +19,7 @@ class Game {
     this.paused = false;
     this.won = false;
     this.launchFx = [];
+    this.viewMode = 0; // 0=第一人称 1=第三人称(背后) 2=第三人称(正面)
   }
 
   init() {
@@ -45,6 +46,12 @@ class Game {
     this.drops = new DropManager(this.scene, this.world);
     this.machines = new MachineSystem(this.scene, this.world);
     this.sky = new Sky(this.scene);
+
+    // 人物模型 + 第一人称手持
+    this.avatar = new PlayerAvatar(this.scene);
+    this.scene.add(this.camera); // 相机须在场景中以渲染手持模型
+    this.fpHand = new FirstPersonHand(this.camera);
+    this.heldItemId = null;
 
     // 高亮框
     this.highlight = new THREE.LineSegments(
@@ -222,6 +229,12 @@ class Game {
         case 'f': this.eatHeld(); break;
         case 'm': { const on = Sfx.toggleMusic(); UI.toast(on ? '♪ 音乐：开' : '♪ 音乐：关'); break; }
         case 'f3': this.debug = !this.debug; e.preventDefault(); break;
+        case 'v':
+          this.viewMode = (this.viewMode + 1) % 3;
+          this.avatar.group.visible = this.viewMode > 0;
+          this.fpHand.group.visible = this.viewMode === 0;
+          UI.toast(['第一人称', '第三人称 · 背面', '第三人称 · 正面'][this.viewMode]);
+          break;
         default:
           if (k >= '1' && k <= '9') {
             this.hotbarSel = parseInt(k) - 1;
@@ -343,6 +356,7 @@ class Game {
         if (s.count <= 0) this.inventory[this.hotbarSel] = null;
         this.stats.placed[item.machine] = (this.stats.placed[item.machine] || 0) + 1;
         Sfx.machinePlace();
+        this.fpHand.swingOnce();
         UI.updateHotbar();
         UI.renderQuest();
       }
@@ -364,6 +378,7 @@ class Game {
     if (s.count <= 0) this.inventory[this.hotbarSel] = null;
     this.stats.placed[s.id] = (this.stats.placed[s.id] || 0) + 1;
     Sfx.place(BLOCKS[item.block].sound || 'stone');
+    this.fpHand.swingOnce();
     UI.updateHotbar();
     UI.renderQuest();
   }
@@ -682,16 +697,44 @@ class Game {
       this.player.update(dt, { forward: false, back: false, left: false, right: false, jump: false });
     }
 
-    // 相机
+    // 相机（含视角切换）
     const eye = this.player.eyePos();
-    this.camera.position.copy(eye);
-    this.camera.rotation.order = 'YXZ';
-    this.camera.rotation.y = this.player.yaw;
-    this.camera.rotation.x = this.player.pitch;
+    if (this.viewMode > 0) {
+      // 第三人称：相机后移，射线检测防穿墙
+      const dist = 3.2;
+      const back = this.player.lookDir().multiplyScalar(-1);
+      if (this.viewMode === 2) { back.multiplyScalar(-1); this.camera.rotation.y = this.player.yaw + Math.PI; this.camera.rotation.x = -this.player.pitch; }
+      else { this.camera.rotation.y = this.player.yaw; this.camera.rotation.x = this.player.pitch; }
+      this.camera.rotation.order = 'YXZ';
+      let d = dist;
+      const lookback = eye.clone().addScaledVector(back, 0.5);
+      const hit = this.world.raycast(lookback, back.clone().normalize(), dist);
+      if (hit) d = Math.max(0.6, hit.dist - 0.6);
+      this.camera.position.copy(eye).addScaledVector(back, d);
+    } else {
+      this.camera.position.copy(eye);
+      this.camera.rotation.order = 'YXZ';
+      this.camera.rotation.y = this.player.yaw;
+      this.camera.rotation.x = this.player.pitch;
+    }
     // 视野变化（冲刺）
     const targetFov = this.player.sprint ? 82 : 75;
     this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 8);
     this.camera.updateProjectionMatrix();
+
+    // 人物模型 & 手持视图
+    const mining = this.breaking != null;
+    const held = this.heldItem();
+    const heldId = held ? held.id : null;
+    if (heldId !== this.heldItemId) {
+      this.heldItemId = heldId;
+      this.avatar.setHeld(heldId);
+      this.fpHand.setHeld(heldId);
+    }
+    this.fpHand.update(dt, this.player.onGround && Math.hypot(this.player.vel.x, this.player.vel.z) > 1, mining);
+    this.avatar.update(dt, this.player, mining);
+    this.avatar.group.visible = this.viewMode > 0 && !this.player.dead;
+    this.fpHand.group.visible = this.viewMode === 0 && !this.player.dead;
 
     // 世界与系统
     this.world.update(this.player.pos.x, this.player.pos.z, 4);
